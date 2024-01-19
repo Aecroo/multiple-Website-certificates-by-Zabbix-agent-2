@@ -1,0 +1,399 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: Templates/Applications
+  templates:
+    - uuid: 6eef62b9599a4fe99fd896631715be4f
+      template: 'multiple Website certificates by Zabbix agent 2'
+      name: 'multiple Website certificates by Zabbix agent 2'
+      description: |
+        Modified by Stefan Matzek @ IntelliTrend GmbH
+        
+        19.01.2024
+        
+        The template to monitor TLS/SSL certificate on the website by Zabbix agent 2 that works without any external scripts.
+        Zabbix agent 2 with the WebCertificate plugin requests certificate using the web.certificate.get key and returns JSON with certificate attributes.
+        
+        You can discuss this template or leave feedback on our forum https://www.zabbix.com/forum/zabbix-suggestions-and-feedback/428309-discussion-thread-for-official-zabbix-template-tls-ssl-certificates-monitoring
+        
+        Template tooling version used: 0.39
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 3d2e1282461a4bc9ba3a8387f391d842
+          name: 'Cert: Get Discovery'
+          type: SIMPLE
+          key: 'icmpping[,,,,]'
+          delay: 1h
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: |
+            Item for Macro to Discovery Conversion.
+            
+            Uses Regular Expression for Converting icmpping output to {$CERT.WEBSITE.HOSTNAME} usermacro content.
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - '.*'
+                - '{$CERT.WEBSITE.HOSTNAME}'
+          tags:
+            - tag: Application
+              value: 'Zabbix Raw Items'
+      discovery_rules:
+        - uuid: ccda262eefc74f33967c482c3ebbd5cb
+          name: 'Cert Discovery'
+          type: SCRIPT
+          key: cert.lld
+          params: |
+            var parsedValue = JSON.parse(value);
+            var certs = parsedValue.list.split(",");
+            var result = [];
+            
+            for (var i = 0; i < certs.length; i++) {
+                result.push({ "{#CERT}": certs[i].trim() });
+            }
+            
+            return JSON.stringify(result);
+          item_prototypes:
+            - uuid: dce9f200c5ee43afac2befafde3191f2
+              name: 'Cert: {#CERT} Subject alternative name'
+              type: DEPENDENT
+              key: 'cert.alternative_names[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: TEXT
+              description: 'The subject alternative name extension allows identities to be bound to the subject of the certificate.  These identities may be included in addition to or in place of the identity in the subject field of the certificate.  Defined options include an Internet electronic mail address, a DNS name, an IP address, and a Uniform Resource Identifier (URI).'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.alternative_names
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+            - uuid: f1fe7d7a90964297bff9421593de4a75
+              name: 'Cert: {#CERT} Issuer'
+              type: DEPENDENT
+              key: 'cert.issuer[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: TEXT
+              description: 'The field identifies the entity that has signed and issued the certificate.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.issuer
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+            - uuid: 9360102d748042e1a0e3af49171923e3
+              name: 'Cert: {#CERT} Last validation status'
+              type: DEPENDENT
+              key: 'cert.message[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: TEXT
+              description: 'Last check result message.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.result.message
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+            - uuid: 4a7cedd204774cc09cf461dc83c85398
+              name: 'Cert: {#CERT} Expires on'
+              type: DEPENDENT
+              key: 'cert.not_after[{#CERT}]'
+              delay: '0'
+              history: 7d
+              units: unixtime
+              description: 'The date on which the certificate validity period ends.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.not_after.timestamp
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+              trigger_prototypes:
+                - uuid: ae7958a0af7e456db0a69fa0f5850168
+                  expression: '(last(/multiple Website certificates by Zabbix agent 2/cert.not_after[{#CERT}]) - now()) / 86400 < {$CERT.EXPIRY.WARN}'
+                  name: 'Cert: {#CERT} SSL certificate expires soon (less than {$CERT.EXPIRY.WARN} days)'
+                  priority: WARNING
+                  description: 'The SSL certificate should be updated or it will become untrusted.'
+                  dependencies:
+                    - name: 'Cert: {#CERT} SSL certificate is invalid'
+                      expression: 'find(/multiple Website certificates by Zabbix agent 2/cert.validation[{#CERT}],,"like","invalid")=1'
+            - uuid: 69c482a8ae5049998684d318244cf732
+              name: 'Cert: {#CERT} Valid from'
+              type: DEPENDENT
+              key: 'cert.not_before[{#CERT}]'
+              delay: '0'
+              history: 7d
+              units: unixtime
+              description: 'The date on which the certificate validity period begins.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.not_before.timestamp
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+            - uuid: ba40c02a21e046888581cb1a377766e3
+              name: 'Cert: {#CERT} Public key algorithm'
+              type: DEPENDENT
+              key: 'cert.public_key_algorithm[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: CHAR
+              description: 'The digital signature algorithm is used to verify the signature of a certificate.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.public_key_algorithm
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+            - uuid: c15d319c335a41c9b2d1bd68d867d448
+              name: 'Cert: {#CERT} Serial number'
+              type: DEPENDENT
+              key: 'cert.serial_number[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: CHAR
+              description: 'The serial number is a positive integer assigned by the CA to each certificate. It is unique for each certificate issued by a given CA. Non-conforming CAs may issue certificates with serial numbers that are negative or zero.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.serial_number
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+            - uuid: f876dfdce7e540b789587623bbcda529
+              name: 'Cert: {#CERT} Fingerprint'
+              type: DEPENDENT
+              key: 'cert.sha1_fingerprint[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: CHAR
+              description: 'The Certificate Signature (SHA1 Fingerprint or Thumbprint) is the hash of the entire certificate in DER form.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.sha1_fingerprint
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+              trigger_prototypes:
+                - uuid: 8ca021b81b01423a88d35f3172faba63
+                  expression: 'last(/multiple Website certificates by Zabbix agent 2/cert.sha1_fingerprint[{#CERT}]) <> last(/multiple Website certificates by Zabbix agent 2/cert.sha1_fingerprint[{#CERT}],#2)'
+                  name: 'Cert: {#CERT} Fingerprint has changed (new version: {ITEM.VALUE})'
+                  priority: INFO
+                  description: |
+                    The SSL certificate fingerprint has changed. If you did not update the certificate, it may mean your certificate has been hacked. Ack to close.
+                    There could be multiple valid certificates on some installations. In this case, the trigger will have a false positive. You can ignore it or disable the trigger.
+                  manual_close: 'YES'
+            - uuid: 2744d5497ca140e595ef30b957d6bfb2
+              name: 'Cert: {#CERT} Signature algorithm'
+              type: DEPENDENT
+              key: 'cert.signature_algorithm[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: CHAR
+              description: 'The algorithm identifier for the algorithm used by the CA to sign the certificate.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.signature_algorithm
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+            - uuid: 705f1f0263a04de192fe1683c019fb2a
+              name: 'Cert: {#CERT} Subject'
+              type: DEPENDENT
+              key: 'cert.subject[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: TEXT
+              description: 'The field identifies the entity associated with the public key stored in the subject public key field.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.subject
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+            - uuid: 723bba2e6f2845b08797a7e812056e40
+              name: 'Cert: {#CERT} Validation result'
+              type: DEPENDENT
+              key: 'cert.validation[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: CHAR
+              description: 'The certificate validation result. Possible values: valid/invalid/valid-but-self-signed'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.result.value
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+              trigger_prototypes:
+                - uuid: df5f28d4e1054122b2caa93c795ca988
+                  expression: 'find(/multiple Website certificates by Zabbix agent 2/cert.validation[{#CERT}],,"like","invalid")=1'
+                  name: 'Cert: {#CERT} SSL certificate is invalid'
+                  priority: HIGH
+                  description: 'SSL certificate has expired or it is issued for another domain.'
+            - uuid: 50c1764de6c1456f85b10a12b898a561
+              name: 'Cert: {#CERT} Version'
+              type: DEPENDENT
+              key: 'cert.version[{#CERT}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: CHAR
+              description: 'The version of the encoded certificate.'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.version
+              master_item:
+                key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              tags:
+                - tag: resource
+                  value: general
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: dependent
+                - tag: type
+                  value: gauge
+            - uuid: 2f5f47d5553745b48722d667e151e256
+              name: 'Cert: Get {#CERT}'
+              key: 'web.certificate.get[{#CERT},{$CERT.WEBSITE.PORT:"{#CERT}"},{$CERT.WEBSITE.IP:"{#CERT}"}]'
+              delay: 15m
+              history: '0'
+              trends: '0'
+              value_type: TEXT
+              description: 'Returns the JSON with attributes of a certificate of the requested site: {#CERT}.'
+              tags:
+                - tag: data
+                  value: raw
+                - tag: target
+                  value: '{#CERT}'
+                - tag: transport
+                  value: agent
+          parameters:
+            - name: list
+              value: '{$CERT.WEBSITE.HOSTNAME}'
+      macros:
+        - macro: '{$CERT.EXPIRY.WARN}'
+          value: '7'
+          description: 'Number of days until the certificate expires.'
+        - macro: '{$CERT.WEBSITE.HOSTNAME}'
+          value: '<Put DNS name>'
+          description: 'The website DNS name for the connection.'
+        - macro: '{$CERT.WEBSITE.IP}'
+          description: 'The website IP address for the connection.'
+        - macro: '{$CERT.WEBSITE.PORT}'
+          value: '443'
+          description: 'The TLS/SSL port number of the website.'
