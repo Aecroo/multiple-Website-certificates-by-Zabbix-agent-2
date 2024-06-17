@@ -20,27 +20,6 @@ zabbix_export:
         Template tooling version used: 0.39
       groups:
         - name: Templates/Applications
-      items:
-        - uuid: 3d2e1282461a4bc9ba3a8387f391d842
-          name: 'Cert: Get Discovery'
-          type: SIMPLE
-          key: 'icmpping[,,,,]'
-          delay: 1h
-          history: '0'
-          trends: '0'
-          value_type: TEXT
-          description: |
-            Item for Macro to Discovery Conversion.
-            
-            Uses Regular Expression for Converting icmpping output to {$CERT.WEBSITE.HOSTNAME} usermacro content.
-          preprocessing:
-            - type: REGEX
-              parameters:
-                - '.*'
-                - '{$CERT.WEBSITE.HOSTNAME}'
-          tags:
-            - tag: Application
-              value: 'Zabbix Raw Items'
       discovery_rules:
         - uuid: ccda262eefc74f33967c482c3ebbd5cb
           name: 'Cert Discovery'
