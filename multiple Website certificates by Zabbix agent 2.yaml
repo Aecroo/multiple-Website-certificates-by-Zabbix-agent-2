@@ -133,8 +133,8 @@ zabbix_export:
                   value: gauge
               trigger_prototypes:
                 - uuid: ae7958a0af7e456db0a69fa0f5850168
-                  expression: '(last(/multiple Website certificates by Zabbix agent 2/cert.not_after[{#CERT}]) - now()) / 86400 < {$CERT.EXPIRY.WARN}'
-                  name: 'Cert: {#CERT} SSL certificate expires soon (less than {$CERT.EXPIRY.WARN} days)'
+                  expression: '(last(/multiple Website certificates by Zabbix agent 2/cert.not_after[{#CERT}]) - now()) / 86400 < {$CERT.EXPIRY.WARN:"{#CERT}"}'
+                  name: 'Cert: {#CERT} SSL certificate expires soon (less than {$CERT.EXPIRY.WARN:"{#CERT}"} days)'
                   priority: WARNING
                   description: 'The SSL certificate should be updated or it will become untrusted.'
                   dependencies:
